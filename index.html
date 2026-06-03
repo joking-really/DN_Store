@@ -1092,7 +1092,8 @@
     });
 
     // ===== CHATBOT =====
-    const GROQ_API_KEY = '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';
+    const GROQ_API_KEY = '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';
+    const chatHistory = []; // keep conversation context
 
     function toggleChat() {
       document.getElementById('chatPanel').classList.toggle('active');
@@ -1107,6 +1108,9 @@
       messagesDiv.innerHTML += `<div class="chat-message user">${escapeHtml(msg)}</div>`;
       input.value = '';
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+      // Track user message in history
+      chatHistory.push({ role: 'user', content: msg });
 
       // Show typing
       const typingId = 'typing-' + Date.now();
@@ -1125,7 +1129,7 @@
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            model: 'llama3-8b-8192',
+            model: 'llama-3.1-8b-instant',
             messages: [
               {
                 role: 'system',
@@ -1142,21 +1146,34 @@ STORE INFO:
 
 TONE: Warm, professional, helpful. Use short paragraphs. Mix English with occasional Urdu phrases ("Ji", "Insha'Allah", "Shukriya"). Keep responses under 80 words. If you don't know something, suggest contacting support.`
               },
-              { role: 'user', content: msg }
+              ...chatHistory
             ],
             temperature: 0.7,
             max_tokens: 200
           })
         });
 
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.error('Groq API error:', response.status, errorData);
+          throw new Error(`API error ${response.status}: ${errorData?.error?.message || 'Unknown error'}`);
+        }
+
         const data = await response.json();
         const reply = data.choices?.[0]?.message?.content || "Sorry, I'm having trouble connecting. Please try again or contact our team.";
 
         document.getElementById(typingId).remove();
-        messagesDiv.innerHTML += `<div class="chat-message bot">${escapeHtml(reply)}</div>`;
+        // Render reply safely — convert newlines to <br> for readability
+        const safeReply = escapeHtml(reply).replace(/\n/g, '<br>');
+        messagesDiv.innerHTML += `<div class="chat-message bot">${safeReply}</div>`;
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+        // Track assistant reply in history (keep last 10 exchanges to avoid token overflow)
+        chatHistory.push({ role: 'assistant', content: reply });
+        if (chatHistory.length > 20) chatHistory.splice(0, 2);
       } catch (err) {
-        document.getElementById(typingId).remove();
+        console.error('Chatbot error:', err);
+        document.getElementById(typingId)?.remove();
         messagesDiv.innerHTML += `<div class="chat-message bot">Sorry, I'm having trouble right now. Please WhatsApp us at +923360784541 for quick help!</div>`;
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
       }
